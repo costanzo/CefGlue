@@ -19,6 +19,7 @@ namespace Xilium.CefGlue.Avalonia.Platform.MacOS
         public double Height;
     }
 
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
     internal struct CGRect
     {
         public CGPoint Origin;

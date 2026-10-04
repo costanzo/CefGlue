@@ -1,40 +1,25 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>$(DotnetVersion)</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Xilium.CefGlue.Avalonia</RootNamespace>
     <AssemblyName>Xilium.CefGlue.Avalonia</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <PackageId>CefGlue.Avalonia$(PackageSuffix)</PackageId>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug_WindowlessRender'">
-    <DefineConstants>$(DefineConstants);DEBUG</DefineConstants>
+    <Nullable>disable</Nullable>
+    <NoWarn>$(NoWarn);CS8632;CS8981;CS0067;CS0649</NoWarn>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\CefGlue.Common\BaseCefBrowser.cs" Link="Common\BaseCefBrowser.cs" />
+    <Compile Include="**/*.cs" Exclude="bin/**;obj/**" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference PrivateAssets="all" Include="Avalonia" />
-    <PackageReference Include="Avalonia.ReactiveUI" />
-    <PackageReference Include="System.Reactive.Linq" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\CefGlue.Common\CefGlue.Common.csproj">
-      <PrivateAssets>none</PrivateAssets>
-    </ProjectReference>
-    <ProjectReference Include="..\CefGlue\CefGlue.csproj">
-      <PrivateAssets>all</PrivateAssets>
-    </ProjectReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Platform\MacOS\" />
-    <Folder Include="Platform\Windows\" />
+    <PackageReference Include="Avalonia" Version="12.1.1" PrivateAssets="none" />
+    <PackageReference Include="CefGlue.Next.BrowserProcess.Core" Version="152.7977.831" PrivateAssets="none" />
+    <PackageReference Include="CefGlue.Next.Common" Version="152.7977.831" PrivateAssets="none" />
+    <PackageReference Include="CefGlue.Next.Core" Version="152.7977.831" PrivateAssets="none" />
+    <PackageReference Include="ReactiveUI.Avalonia" Version="11.4.13" PrivateAssets="none" />
+    <PackageReference Include="System.Reactive.Linq" Version="6.1.0" PrivateAssets="none" />
   </ItemGroup>
 </Project>

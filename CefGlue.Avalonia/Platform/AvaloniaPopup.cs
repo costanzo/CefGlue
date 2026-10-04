@@ -14,8 +14,8 @@ namespace Xilium.CefGlue.Avalonia.Platform
     {
         private readonly ExtendedAvaloniaPopup _popup;
 
-        public AvaloniaPopup(ExtendedAvaloniaPopup popup, IAvaloniaList<Visual> visualChildren) : 
-            base(popup, visualChildren)
+        public AvaloniaPopup(ExtendedAvaloniaPopup popup, IAvaloniaList<Visual> visualChildren, IOffScreenKeyboardHandler keyboardHandler) :
+            base(popup, visualChildren, keyboardHandler)
         {
             _popup = popup;
         }
@@ -45,7 +45,7 @@ namespace Xilium.CefGlue.Avalonia.Platform
         {
             Dispatcher.UIThread.Post(() =>
             {
-                _popup.Show(_popup.PlacementTarget.GetVisualRoot() as Window);
+                _popup.Show(TopLevel.GetTopLevel(_popup.PlacementTarget) as Window);
             });
         }
 

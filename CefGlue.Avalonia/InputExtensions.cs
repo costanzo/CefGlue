@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using Avalonia;
 using Avalonia.Input;
@@ -47,11 +48,17 @@ namespace Xilium.CefGlue.Avalonia
         public static CefKeyEvent AsCefKeyEvent(this KeyEventArgs eventArgs, bool isKeyUp)
         {
             var modifiers = eventArgs.KeyModifiers.AsCefKeyboardModifiers();
+            // On macOS, CEF interprets windows_key_code/native_key_code as the macOS NSEvent.keyCode
+            // (hardware scan code), not as Windows VK codes. Using Windows VK codes on macOS causes
+            // wrong JS keyCode values (e.g. VK_LEFT=37 maps to macOS 'l' key → JS keyCode 76).
+            var keyCode = OperatingSystem.IsMacOS()
+                ? KeyInterop.MacOSKeyCodeFromPhysicalKey(eventArgs.PhysicalKey)
+                : KeyInterop.VirtualKeyFromKey(eventArgs.Key);
             return new CefKeyEvent()
             {
                 EventType = isKeyUp ? CefKeyEventType.KeyUp : CefKeyEventType.RawKeyDown,
-                WindowsKeyCode = KeyInterop.VirtualKeyFromKey(eventArgs.Key),
-                NativeKeyCode = (int) modifiers,
+                WindowsKeyCode = keyCode,
+                NativeKeyCode = keyCode,
                 IsSystemKey = eventArgs.Key == Key.System,
                 Modifiers = modifiers
             };
@@ -107,6 +114,11 @@ namespace Xilium.CefGlue.Avalonia
             if (keyboardModifiers.HasFlag(KeyModifiers.Shift))
             {
                 modifiers |= CefEventFlags.ShiftDown;
+            }
+
+            if (keyboardModifiers.HasFlag(KeyModifiers.Meta))
+            {
+                modifiers |= CefEventFlags.CommandDown;
             }
 
             return modifiers;
@@ -200,22 +212,17 @@ namespace Xilium.CefGlue.Avalonia
         {
             var dragData = CefDragData.Create();
 
-            // Files
-            if (e.Data.Contains(DataFormats.FileNames))
+            var files = e.DataTransfer.TryGetFiles();
+            if (files is not null)
             {
-                var files = (string[])e.Data.GetFileNames();
-                foreach (var filePath in files)
+                foreach (var file in files)
                 {
-                    var displayName = Path.GetFileName(filePath);
-                    dragData.AddFile(filePath.Replace("\\", "/"), displayName);
+                    dragData.AddFile(file.Path.LocalPath.Replace("\\", "/"), file.Name);
                 }
             }
 
-            // Text
-            if (e.Data.Contains(DataFormats.Text))
-            {
-                dragData.SetFragmentText(e.Data.GetText());
-            }
+            var text = e.DataTransfer.TryGetText();
+            if (!string.IsNullOrWhiteSpace(text)) dragData.SetFragmentText(text);
 
             return dragData;
         }
