@@ -19,7 +19,5 @@
     <PackageReference Include="CefGlue.Next.BrowserProcess.Core" Version="152.7977.831" PrivateAssets="none" />
     <PackageReference Include="CefGlue.Next.Common" Version="152.7977.831" PrivateAssets="none" />
     <PackageReference Include="CefGlue.Next.Core" Version="152.7977.831" PrivateAssets="none" />
-    <PackageReference Include="ReactiveUI.Avalonia" Version="11.4.13" PrivateAssets="none" />
-    <PackageReference Include="System.Reactive.Linq" Version="6.1.0" PrivateAssets="none" />
   </ItemGroup>
 </Project>

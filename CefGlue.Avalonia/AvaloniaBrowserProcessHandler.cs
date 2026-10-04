@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Globalization;
-using System.Reactive.Linq;
-using ReactiveUI.Avalonia;
+using System.Threading;
+using Avalonia.Threading;
 using Xilium.CefGlue.Common.Handlers;
 
 namespace Xilium.CefGlue.Avalonia
@@ -16,7 +16,9 @@ namespace Xilium.CefGlue.Avalonia
 
         private static readonly int PumpIntervalMs = ResolvePumpIntervalMs();
         private readonly object _schedule = new();
-        private IDisposable _pump;
+        private DispatcherTimer _pump;
+        private bool _pumpRequested;
+        private int _immediatePumpQueued;
 
         private static int ResolvePumpIntervalMs()
         {
@@ -32,20 +34,55 @@ namespace Xilium.CefGlue.Avalonia
 
         protected override void OnScheduleMessagePumpWork(long delayMs)
         {
-            // CEF's delay is a deadline, not a timer interval. In particular, a
-            // delay of zero is commonly emitted while work is already pending.
-            // Calling DoMessageLoopWork immediately from that callback can form a
-            // self-sustaining UI-thread loop with CEF 152. A bounded free-running
-            // pump keeps progress without allowing callback storms to consume a CPU.
+            // CEF's delay is a deadline, not a timer interval, so it is never used as
+            // the timer period. A free-running 30 Hz safety pump keeps Chromium alive
+            // when it stops notifying, and requests for immediate work are honoured
+            // straight away; otherwise input, scrolling, and compositor frames are
+            // throttled to the safety rate.
             lock (_schedule)
             {
-                if (_pump == null)
+                if (!_pumpRequested)
                 {
-                    _pump = Observable.Interval(TimeSpan.FromMilliseconds(PumpIntervalMs))
-                        .ObserveOn(AvaloniaScheduler.Instance)
-                        .Subscribe(_ => CefRuntime.DoMessageLoopWork());
+                    _pumpRequested = true;
+                    // DispatcherTimer must be created on the UI thread, where
+                    // DoMessageLoopWork also has to run.
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        _pump = new DispatcherTimer(DispatcherPriority.Default)
+                        {
+                            Interval = TimeSpan.FromMilliseconds(PumpIntervalMs)
+                        };
+                        _pump.Tick += (_, _) => CefRuntime.DoMessageLoopWork();
+                        _pump.Start();
+                    }, DispatcherPriority.Default);
                 }
             }
+
+            if (delayMs > 0)
+            {
+                return;
+            }
+
+            // Notified from any thread, and CEF notifies again while work remains, so a
+            // single queued pump is enough. Coalescing prevents the callback storm that
+            // a job per notification would cause.
+            if (Interlocked.Exchange(ref _immediatePumpQueued, 1) == 1)
+            {
+                return;
+            }
+
+            // Default is the lowest priority Avalonia dispatches unconditionally. Input
+            // and Background are held back while OS input is pending, which stalls the
+            // pump exactly while the user scrolls; anything above Render lets CEF
+            // preempt layout and repaint.
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    // Cleared first, so work scheduled from inside the pump queues a new one.
+                    Volatile.Write(ref _immediatePumpQueued, 0);
+                    CefRuntime.DoMessageLoopWork();
+                },
+                DispatcherPriority.Default);
         }
     }
 }

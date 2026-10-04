@@ -7,6 +7,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Reactive;
 using Avalonia.Threading;
 using Xilium.CefGlue.Common.Helpers;
 using Xilium.CefGlue.Common.Platform;
@@ -20,6 +21,9 @@ namespace Xilium.CefGlue.Avalonia.Platform
     {
         // TODO avalonia: get value from OS
         private const int MouseWheelDelta = 100;
+
+        private Vector _wheelRemainder;
+        private readonly Image _image;
 
         private IDisposable _windowStateChangedObservable;
 
@@ -67,6 +71,7 @@ namespace Xilium.CefGlue.Avalonia.Platform
             control.AddHandler(DragDrop.DropEvent, OnDrop);
 
             var image = CreateImage();
+            _image = image;
             var viewbox = new Viewbox()
             {
                 Child = image,
@@ -106,7 +111,20 @@ namespace Xilium.CefGlue.Avalonia.Platform
 
         private void OnPointerWheelChanged(object sender, PointerWheelEventArgs e)
         {
-            MouseWheelChanged?.Invoke(e.AsCefMouseEvent(MousePositionReferential), (int)e.Delta.X * MouseWheelDelta, (int)e.Delta.Y * MouseWheelDelta);
+            // Trackpads and smooth-scrolling mice report fractional deltas (often
+            // |delta| < 1). Truncating before scaling dropped them to 0, so scrolling
+            // stalled until a single event crossed a whole step. Scale first and keep
+            // the sub-pixel remainder so slow gestures accumulate instead of vanishing.
+            _wheelRemainder += e.Delta * MouseWheelDelta;
+            var deltaX = (int)_wheelRemainder.X;
+            var deltaY = (int)_wheelRemainder.Y;
+            _wheelRemainder = new Vector(_wheelRemainder.X - deltaX, _wheelRemainder.Y - deltaY);
+            e.Handled = true;
+            if (deltaX == 0 && deltaY == 0)
+            {
+                return;
+            }
+            MouseWheelChanged?.Invoke(e.AsCefMouseEvent(MousePositionReferential), deltaX, deltaY);
         }
 
         private void OnPointerReleased(object sender, PointerReleasedEventArgs e)
@@ -159,7 +177,7 @@ namespace Xilium.CefGlue.Avalonia.Platform
             VisibilityChanged?.Invoke(true);
             if (e.RootVisual is Window newWindow)
             {
-                _windowStateChangedObservable = newWindow.GetPropertyChangedObservable(Window.WindowStateProperty).Subscribe(OnHostWindowStateChanged);
+                _windowStateChangedObservable = newWindow.GetPropertyChangedObservable(Window.WindowStateProperty).Subscribe(new AnonymousObserver<AvaloniaPropertyChangedEventArgs>(OnHostWindowStateChanged));
             }
             var renderScaling = TopLevel.GetTopLevel(_control)?.RenderScaling ?? 1d;
             if (renderScaling != RenderSurface.DeviceScaleFactor)
@@ -198,10 +216,19 @@ namespace Xilium.CefGlue.Avalonia.Platform
 
         public override IntPtr? GetHostViewHandle(int initialWidth, int initialHeight)
         {
-            var platformHandle = GetHostWindowPlatformHandle();
-            if (platformHandle is IMacOSTopLevelPlatformHandle macOSHandle)
+            if (CefRuntime.Platform == CefRuntimePlatform.MacOS)
             {
-                return macOSHandle.NSView;
+                // The shared host window only exists on Windows and Linux. Windowless
+                // CEF on macOS uses the owning top-level NSView as its parent for
+                // screen info; until the control is attached there is none, and the
+                // adapter retries on the next layout pass.
+                var topLevelHandle = TopLevel.GetTopLevel(_control)?.TryGetPlatformHandle();
+                return topLevelHandle is IMacOSTopLevelPlatformHandle macOSHandle ? macOSHandle.NSView : null;
+            }
+            var platformHandle = GetHostWindowPlatformHandle();
+            if (platformHandle is IMacOSTopLevelPlatformHandle macOSPlatformHandle)
+            {
+                return macOSPlatformHandle.NSView;
             }
             return platformHandle?.Handle;
         }
@@ -256,7 +283,14 @@ namespace Xilium.CefGlue.Avalonia.Platform
         public override bool SetCursor(IntPtr cursorHandle, CefCursorType cursorType)
         {
             var cursor = CursorsProvider.GetCursorFromCefType(cursorType);
-            Dispatcher.UIThread.Post(() => _control.Cursor = cursor);
+            Dispatcher.UIThread.Post(() =>
+            {
+                _control.Cursor = cursor;
+                // The rendered image is a visual-only child, so it does not inherit
+                // Cursor from the browser control. Avalonia applies the cursor of the
+                // hit-tested element, which is this image, so set it there as well.
+                _image.Cursor = cursor;
+            });
             return true;
         }
 
